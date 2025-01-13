@@ -34,30 +34,23 @@ class RAGState(TypedDict):
 def handle_errors(method: Callable) -> Callable:
     """Decorator for handling errors in node operations."""
     @wraps(method)
-    def wrapper(self, state: "RAGState", *args, **kwargs) -> "RAGState":
+    def wrapper(self, state: RAGState, *args, **kwargs) -> RAGState:
         try:
             return method(self, state, *args, **kwargs)
         except Exception as e:
             error_type = method.__name__.replace("_", " ")
             state["metadata"][f"{error_type}_error"] = str(e)
-            # Set default values for required fields
-            if "retrieved_documents" not in state:
-                state["retrieved_documents"] = []
-            if "context" not in state:
-                state["context"] = ""
-            if "response" not in state:
-                state["response"] = f"Error during {error_type}: {str(e)}"
             return state
     return wrapper
 
 class BaseNode:
     """Base class for RAG pipeline nodes."""
     
-    def adapt_parameters(self, state: "RAGState") -> None:
+    def adapt_parameters(self, state: RAGState) -> None:
         """Adapt node parameters based on evaluation feedback."""
         pass
     
-    def process_iteration(self, state: "RAGState") -> None:
+    def process_iteration(self, state: RAGState) -> None:
         """Process iteration-specific logic."""
         if state["iteration"] > 0:
             self.adapt_parameters(state)
@@ -77,7 +70,7 @@ class RetrievalNode(BaseNode):
         self.k = k
         self.min_relevance_score = min_relevance_score
     
-    def adapt_parameters(self, state: "RAGState") -> None:
+    def adapt_parameters(self, state: RAGState) -> None:
         """Adapt retrieval parameters based on evaluation feedback."""
         if not state.get("retrieval_metrics"):
             return
@@ -93,8 +86,8 @@ class RetrievalNode(BaseNode):
     @handle_errors
     def __call__(
         self,
-        state: "RAGState",
-    ) -> "RAGState":
+        state: RAGState,
+    ) -> RAGState:
         """Retrieve relevant documents for the query."""
         self.process_iteration(state)
         
@@ -133,7 +126,7 @@ class GenerationNode(BaseNode):
         if hasattr(self.llm, "temperature"):
             self.llm.temperature = self.temperature
     
-    def adapt_parameters(self, state: "RAGState") -> None:
+    def adapt_parameters(self, state: RAGState) -> None:
         """Adapt generation parameters based on evaluation feedback."""
         if not state.get("generation_metrics"):
             return
@@ -149,8 +142,8 @@ class GenerationNode(BaseNode):
     @handle_errors
     def __call__(
         self,
-        state: "RAGState",
-    ) -> "RAGState":
+        state: RAGState,
+    ) -> RAGState:
         """Generate response using retrieved context."""
         self.process_iteration(state)
         
@@ -189,7 +182,7 @@ class EvaluationNode(BaseNode):
         self.max_iterations = max_iterations
         self.relevance_threshold = relevance_threshold
     
-    def should_continue(self, state: "RAGState") -> bool:
+    def should_continue(self, state: RAGState) -> bool:
         """Determine if the pipeline should continue iterating."""
         if state["iteration"] >= state["max_iterations"]:
             return False
@@ -205,8 +198,8 @@ class EvaluationNode(BaseNode):
     @handle_errors
     def __call__(
         self,
-        state: "RAGState",
-    ) -> "RAGState":
+        state: RAGState,
+    ) -> RAGState:
         """Evaluate retrieval and generation performance."""
         eval_results = self.evaluator.evaluate_rag_pipeline(
             query=state["query"],
@@ -257,7 +250,7 @@ def create_rag_graph(
     workflow.add_node("evaluate", evaluation_node)
     
     # Define conditional edge
-    def should_continue(state: "RAGState") -> str:
+    def should_continue(state: RAGState) -> str:
         """Determine next node based on evaluation results."""
         if evaluation_node.should_continue(state):
             return "retrieve"  # Continue with feedback loop
@@ -286,10 +279,10 @@ def run_rag_pipeline(
     query: str,
     graph: StateGraph,
     max_iterations: int = 2,
-) -> "RAGState":
+) -> RAGState:
     """Run the RAG pipeline on a query."""
-    # Initialize state
-    initial_state: "RAGState" = {
+    # Initialize state with proper typing
+    initial_state: RAGState = {
         "query": query,
         "retrieved_documents": [],
         "context": "",
